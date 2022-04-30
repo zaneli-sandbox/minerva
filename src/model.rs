@@ -102,6 +102,7 @@ pub struct Param {
 
 pub struct AppData {
     pub process_interval: Duration,
+    pub csv_fixture_dir: String,
     pub processes_r: evmap::ReadHandle<String, QueryProcess>,
     pub processes_w: Arc<Mutex<evmap::WriteHandle<String, QueryProcess>>>,
 }

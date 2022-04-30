@@ -8,6 +8,7 @@ authors = ["zaneli <shun.otani@gmail.com>"]
 actix-web = { version = "3.3", features = ["rustls"] }
 actix-rt = "1.1"
 aws-sdk-athena = "0.10"
+csv = "1.1"
 dotenv = "0.15"
 evmap = "10.0"
 evmap-derive = "0.2"

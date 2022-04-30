@@ -43,6 +43,7 @@ async fn main() -> std::io::Result<()> {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(5);
+    let csv_fixture_dir = env::var("CSV_FIXTURE_DIR").unwrap_or(".".to_string());
 
     let (processes_r, processes_w) = evmap::new();
     let processes_w = Arc::new(Mutex::new(processes_w));
@@ -51,6 +52,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(crate::model::AppData {
                 process_interval: Duration::from_secs(process_interval),
+                csv_fixture_dir: csv_fixture_dir.clone(),
                 processes_r: processes_r.clone(),
                 processes_w: processes_w.clone(),
             }))

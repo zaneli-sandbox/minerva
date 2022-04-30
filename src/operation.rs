@@ -5,6 +5,8 @@ use aws_sdk_athena::model::{Datum, QueryExecutionState, ResultSet, Row};
 use sqlparser::ast::{ObjectName, SetExpr, Statement, TableFactor};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
+use std::fs::File;
+use std::io::BufReader;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use uuid::Uuid;
@@ -142,94 +144,44 @@ pub fn get_query_results(
         return Ok(HttpResponse::BadRequest().body(format!("state not succeeded yet: {:?}", state)));
     }
 
+    let table_name = &query_process.table_name;
+    let f = File::open(format!("{:}/{:}.csv", data.csv_fixture_dir, table_name))?;
+    let b = BufReader::new(f);
+    let mut csv_reader = csv::ReaderBuilder::new().has_headers(true).from_reader(b);
+
+    let mut headers = Vec::new();
+    for header in csv_reader
+        .headers()
+        .map_err(|_| HttpResponse::BadRequest().body("failed to read csv headers".to_string()))?
+    {
+        headers.push(
+            Datum::builder()
+                .set_var_char_value(Some(header.to_string()))
+                .build(),
+        );
+    }
+
     let mut rows = Vec::new();
-    rows.push(
-        Row::builder()
-            .set_data(Some(vec![
+    rows.push(Row::builder().set_data(Some(headers)).build());
+    for records in csv_reader.records() {
+        let rs = records.map_err(|_| {
+            HttpResponse::BadRequest().body("failed to read csv fixture".to_string())
+        })?;
+
+        let mut records = Vec::new();
+        for record in rs.iter() {
+            records.push(
                 Datum::builder()
-                    .set_var_char_value(Some("date".to_string()))
+                    .set_var_char_value(Some(record.to_string()))
                     .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("location".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("browser".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("uri".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("status".to_string()))
-                    .build(),
-            ]))
-            .build(),
-    );
+            );
+        }
+        rows.push(Row::builder().set_data(Some(records)).build());
+    }
+
     let next_token = if input.next_token.is_none() {
-        rows.push(
-            Row::builder()
-                .set_data(Some(vec![
-                    Datum::builder()
-                        .set_var_char_value(Some("2014-07-05".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("SFO4".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("Safari".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("200".to_string()))
-                        .build(),
-                ]))
-                .build(),
-        );
-        rows.push(
-            Row::builder()
-                .set_data(Some(vec![
-                    Datum::builder()
-                        .set_var_char_value(Some("2014-07-05".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("SFO4".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("Opera".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("200".to_string()))
-                        .build(),
-                ]))
-                .build(),
-        );
         Some("dummy_token".to_string())
     } else {
-        rows.push(
-            Row::builder()
-                .set_data(Some(vec![
-                    Datum::builder()
-                        .set_var_char_value(Some("2014-07-05".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("SFO4".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("Firefox".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("/test-image-3.jpeg".to_string()))
-                        .build(),
-                    Datum::builder()
-                        .set_var_char_value(Some("200".to_string()))
-                        .build(),
-                ]))
-                .build(),
-        );
         None
     };
     Ok(
