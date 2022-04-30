@@ -3,7 +3,7 @@ mod model;
 use actix_rt::spawn;
 use actix_rt::time;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Result};
-use aws_sdk_athena::model::QueryExecutionState;
+use aws_sdk_athena::model::{Datum, QueryExecutionState, ResultSet, Row};
 use dotenv::dotenv;
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -21,15 +21,9 @@ async fn root(
     input: Option<web::Json<crate::model::Param>>,
     data: web::Data<AppData>,
 ) -> Result<HttpResponse> {
-    let target = req
-        .headers()
-        .get(OPERATION_TARGET_HEADER)
-        .ok_or_else(|| {
-            HttpResponse::BadRequest().body(format!(
-                "'{:}' not found",
-                OPERATION_TARGET_HEADER
-            ))
-        })?;
+    let target = req.headers().get(OPERATION_TARGET_HEADER).ok_or_else(|| {
+        HttpResponse::BadRequest().body(format!("'{:}' not found", OPERATION_TARGET_HEADER))
+    })?;
 
     if target == OPERATION_NAME_START_QUERY_EXECUTION {
         let query_execution_id = Uuid::new_v4().to_string();
@@ -51,19 +45,101 @@ async fn root(
         let state = data
             .queries_r
             .get_one::<String>(&input.QueryExecutionId)
-            .unwrap();
+            .ok_or_else(|| {
+                HttpResponse::BadRequest().body("query_execution_id not found".to_string())
+            })?;
         let state = QueryExecutionState::from(state.to_string().as_ref());
 
         Ok(
             HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse {
                 QueryExecution: crate::model::QueryExecutionResponse {
                     QueryExecutionId: input.QueryExecutionId.clone(),
-                    Status: crate::model::StatusResponse { state: state },
+                    Status: crate::model::StatusResponse { State: state },
                 },
             }),
         )
     } else if target == OPERATION_NAME_GET_QUERY_RESULTS {
-        Ok(HttpResponse::NotImplemented().body(format!("not implemented yet: {:?}", target)))
+        let input =
+            input.ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
+        let state = data
+            .queries_r
+            .get_one::<String>(&input.QueryExecutionId)
+            .ok_or_else(|| {
+                HttpResponse::BadRequest().body("query_execution_id not found".to_string())
+            })?;
+        let state = QueryExecutionState::from(state.to_string().as_ref());
+        if state != QueryExecutionState::Succeeded {
+            return Ok(
+                HttpResponse::BadRequest().body(format!("state not succeeded yet: {:?}", state))
+            );
+        }
+
+        let rows = vec![
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("date".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("location".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("browser".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("uri".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("status".to_string()))
+                        .build(),
+                ]))
+                .build(),
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("2014-07-05".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("SFO4".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("Safari".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("200".to_string()))
+                        .build(),
+                ]))
+                .build(),
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("2014-07-05".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("SFO4".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("Opera".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("200".to_string()))
+                        .build(),
+                ]))
+                .build(),
+        ];
+        Ok(
+            HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
+                ResultSet: ResultSet::builder().set_rows(Some(rows)).build(),
+                NextToken: None,
+                UpdateCount: 0,
+            }),
+        )
     } else {
         Ok(HttpResponse::BadRequest().body(format!("unexpected target: {:?}", target)))
     }
