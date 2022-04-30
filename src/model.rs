@@ -1,5 +1,7 @@
 use aws_sdk_athena::model::{QueryExecutionState, ResultSet};
 use serde::ser::SerializeStruct;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 #[derive(serde::Serialize)]
 #[allow(non_snake_case)]
@@ -92,4 +94,10 @@ fn serialize_state<S: serde::Serializer>(
 pub struct Param {
     pub QueryExecutionId: Option<String>,
     pub QueryString: Option<String>,
+}
+
+pub struct AppData {
+    pub process_interval: Duration,
+    pub queries_r: evmap::ReadHandle<String, String>,
+    pub queries_w: Arc<Mutex<evmap::WriteHandle<String, String>>>,
 }
