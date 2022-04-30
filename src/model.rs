@@ -4,24 +4,25 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 pub struct StartQueryExecutionResponse {
-    pub QueryExecutionId: String,
+    #[serde(rename = "QueryExecutionId")]
+    pub query_execution_id: String,
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 pub struct GetQueryExecutionResponse {
-    pub QueryExecution: QueryExecutionResponse,
+    #[serde(rename = "QueryExecution")]
+    pub query_execution: QueryExecutionResponse,
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 pub struct GetQueryResultsResponse {
-    pub UpdateCount: u32,
-    #[serde(serialize_with = "serialize_result_set")]
-    pub ResultSet: ResultSet,
-    pub NextToken: Option<String>,
+    #[serde(rename = "UpdateCount")]
+    pub update_count: u32,
+    #[serde(rename = "ResultSet", serialize_with = "serialize_result_set")]
+    pub result_set: ResultSet,
+    #[serde(rename = "NextToken")]
+    pub next_token: Option<String>,
 }
 
 fn serialize_result_set<S: serde::Serializer>(
@@ -41,9 +42,9 @@ fn serialize_result_set<S: serde::Serializer>(
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 struct Row {
-    Data: Vec<Datum>,
+    #[serde(rename = "Data")]
+    data: Vec<Datum>,
 }
 
 impl Row {
@@ -53,33 +54,33 @@ impl Row {
             for datum in d {
                 if let Some(v) = datum.var_char_value {
                     data.push(Datum {
-                        VarCharValue: v.clone(),
+                        var_char_value: v.clone(),
                     });
                 }
             }
         }
-        Row { Data: data }
+        Row { data: data }
     }
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 struct Datum {
-    VarCharValue: String,
+    #[serde(rename = "VarCharValue")]
+    var_char_value: String,
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 pub struct QueryExecutionResponse {
-    pub QueryExecutionId: String,
-    pub Status: StatusResponse,
+    #[serde(rename = "QueryExecutionId")]
+    pub query_execution_id: String,
+    #[serde(rename = "Status")]
+    pub status: StatusResponse,
 }
 
 #[derive(serde::Serialize)]
-#[allow(non_snake_case)]
 pub struct StatusResponse {
-    #[serde(serialize_with = "serialize_state")]
-    pub State: QueryExecutionState,
+    #[serde(rename = "State", serialize_with = "serialize_state")]
+    pub state: QueryExecutionState,
 }
 
 fn serialize_state<S: serde::Serializer>(
@@ -90,10 +91,11 @@ fn serialize_state<S: serde::Serializer>(
 }
 
 #[derive(Debug, serde::Deserialize)]
-#[allow(non_snake_case)]
 pub struct Param {
-    pub QueryExecutionId: Option<String>,
-    pub QueryString: Option<String>,
+    #[serde(rename = "QueryExecutionId")]
+    pub query_execution_id: Option<String>,
+    #[serde(rename = "QueryString")]
+    pub query_string: Option<String>,
 }
 
 pub struct AppData {

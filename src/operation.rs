@@ -13,7 +13,7 @@ pub fn start_query_execution(
     data: &crate::model::AppData,
 ) -> Result<HttpResponse> {
     let query_string = input
-        .QueryString
+        .query_string
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
     let dialect = GenericDialect {};
@@ -31,7 +31,7 @@ pub fn start_query_execution(
 
     Ok(
         HttpResponse::Ok().json(crate::model::StartQueryExecutionResponse {
-            QueryExecutionId: query_execution_id.clone(),
+            query_execution_id: query_execution_id.clone(),
         }),
     )
 }
@@ -41,7 +41,7 @@ pub fn get_query_execution(
     data: &crate::model::AppData,
 ) -> Result<HttpResponse> {
     let query_execution_id = input
-        .QueryExecutionId
+        .query_execution_id
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
     let state = data
@@ -54,9 +54,9 @@ pub fn get_query_execution(
 
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse {
-            QueryExecution: crate::model::QueryExecutionResponse {
-                QueryExecutionId: query_execution_id.clone(),
-                Status: crate::model::StatusResponse { State: state },
+            query_execution: crate::model::QueryExecutionResponse {
+                query_execution_id: query_execution_id.clone(),
+                status: crate::model::StatusResponse { state: state },
             },
         }),
     )
@@ -67,7 +67,7 @@ pub fn get_query_results(
     data: &crate::model::AppData,
 ) -> Result<HttpResponse> {
     let query_execution_id = input
-        .QueryExecutionId
+        .query_execution_id
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
     let state = data
@@ -142,9 +142,9 @@ pub fn get_query_results(
     ];
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
-            ResultSet: ResultSet::builder().set_rows(Some(rows)).build(),
-            NextToken: None,
-            UpdateCount: 0,
+            result_set: ResultSet::builder().set_rows(Some(rows)).build(),
+            next_token: None,
+            update_count: 0,
         }),
     )
 }
