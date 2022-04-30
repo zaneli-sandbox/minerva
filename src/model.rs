@@ -90,7 +90,7 @@ fn serialize_state<S: serde::Serializer>(
     s.serialize_str(state.as_ref())
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(serde::Deserialize)]
 pub struct Param {
     #[serde(rename = "QueryExecutionId")]
     pub query_execution_id: Option<String>,
@@ -100,6 +100,12 @@ pub struct Param {
 
 pub struct AppData {
     pub process_interval: Duration,
-    pub queries_r: evmap::ReadHandle<String, String>,
-    pub queries_w: Arc<Mutex<evmap::WriteHandle<String, String>>>,
+    pub processes_r: evmap::ReadHandle<String, QueryProcess>,
+    pub processes_w: Arc<Mutex<evmap::WriteHandle<String, QueryProcess>>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, evmap_derive::ShallowCopy)]
+pub struct QueryProcess {
+    pub table_name: String,
+    pub state: String,
 }

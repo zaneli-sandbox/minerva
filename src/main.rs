@@ -44,15 +44,15 @@ async fn main() -> std::io::Result<()> {
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(5);
 
-    let (queries_r, queries_w) = evmap::new();
-    let queries_w = Arc::new(Mutex::new(queries_w));
+    let (processes_r, processes_w) = evmap::new();
+    let processes_w = Arc::new(Mutex::new(processes_w));
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(crate::model::AppData {
                 process_interval: Duration::from_secs(process_interval),
-                queries_r: queries_r.clone(),
-                queries_w: queries_w.clone(),
+                processes_r: processes_r.clone(),
+                processes_w: processes_w.clone(),
             }))
             .app_data(web::JsonConfig::default().content_type(|mime| {
                 mime.type_() == mime::APPLICATION

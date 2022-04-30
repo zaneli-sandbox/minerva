@@ -2,6 +2,7 @@ use actix_rt::spawn;
 use actix_rt::time;
 use actix_web::{HttpResponse, Result};
 use aws_sdk_athena::model::{Datum, QueryExecutionState, ResultSet, Row};
+use sqlparser::ast::{ObjectName, SetExpr, Statement, TableFactor};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::{Arc, Mutex};
@@ -17,16 +18,76 @@ pub fn start_query_execution(
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
     let dialect = GenericDialect {};
-    let _ = Parser::parse_sql(&dialect, &query_string).map_err(|_| {
+    let ast = Parser::parse_sql(&dialect, &query_string).map_err(|_| {
         HttpResponse::BadRequest().body(format!("invalid query: {:}", query_string))
     })?;
+    if ast.len() != 1 {
+        return Ok(HttpResponse::BadRequest().body(format!(
+            "unsupported query: {:}, ast.len() = {:}",
+            query_string,
+            ast.len()
+        )));
+    }
+    let table_name = match &ast[0] {
+        Statement::Query(query) => match &query.body {
+            SetExpr::Select(select) => {
+                if select.from.len() != 1 {
+                    return Ok(HttpResponse::BadRequest().body(format!(
+                        "unsupported query: {:}, select.from.len() = {:}",
+                        query_string,
+                        select.from.len()
+                    )));
+                }
+                match &select.from[0].relation {
+                    TableFactor::Table {
+                        name: ObjectName(name),
+                        alias: _,
+                        args: _,
+                        with_hints: _,
+                    } => {
+                        if name.len() == 1 {
+                            // Note: only `tablename`
+                            &name[0].value
+                        } else if name.len() == 2 {
+                            // Note: `databasename.tablename`
+                            &name[1].value
+                        } else {
+                            return Ok(HttpResponse::BadRequest().body(format!(
+                                "unsupported query: {:}, name.len() = {:}",
+                                query_string,
+                                name.len()
+                            )));
+                        }
+                    }
+                    relation => {
+                        return Ok(HttpResponse::BadRequest().body(format!(
+                            "unsupported query: {:}, relation = {:?}",
+                            query_string, relation
+                        )))
+                    }
+                }
+            }
+            stmt => {
+                return Ok(HttpResponse::BadRequest().body(format!(
+                    "unsupported query: {:}, statement = {:?}",
+                    query_string, stmt
+                )))
+            }
+        },
+        _ => {
+            return Ok(
+                HttpResponse::BadRequest().body(format!("unsupported query: {:}", query_string))
+            )
+        }
+    };
 
     let query_execution_id = Uuid::new_v4().to_string();
     process_query(
         query_execution_id.clone(),
+        table_name.clone(),
         data.process_interval,
-        data.queries_r.clone(),
-        data.queries_w.clone(),
+        data.processes_r.clone(),
+        data.processes_w.clone(),
     );
 
     Ok(
@@ -44,13 +105,13 @@ pub fn get_query_execution(
         .query_execution_id
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
-    let state = data
-        .queries_r
+    let query_process = data
+        .processes_r
         .get_one::<String>(&query_execution_id)
         .ok_or_else(|| {
             HttpResponse::BadRequest().body("query_execution_id not found".to_string())
         })?;
-    let state = QueryExecutionState::from(state.to_string().as_ref());
+    let state = QueryExecutionState::from(query_process.state.as_ref());
 
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse {
@@ -70,13 +131,13 @@ pub fn get_query_results(
         .query_execution_id
         .clone()
         .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
-    let state = data
-        .queries_r
+    let query_process = data
+        .processes_r
         .get_one::<String>(&query_execution_id)
         .ok_or_else(|| {
             HttpResponse::BadRequest().body("query_execution_id not found".to_string())
         })?;
-    let state = QueryExecutionState::from(state.to_string().as_ref());
+    let state = QueryExecutionState::from(query_process.state.as_ref());
     if state != QueryExecutionState::Succeeded {
         return Ok(HttpResponse::BadRequest().body(format!("state not succeeded yet: {:?}", state)));
     }
@@ -151,41 +212,55 @@ pub fn get_query_results(
 
 fn process_query(
     query_execution_id: String,
+    table_name: String,
     process_interval: Duration,
-    queries_r: evmap::ReadHandle<String, String>,
-    queries_w: Arc<Mutex<evmap::WriteHandle<String, String>>>,
+    processes_r: evmap::ReadHandle<String, crate::model::QueryProcess>,
+    processes_w: Arc<Mutex<evmap::WriteHandle<String, crate::model::QueryProcess>>>,
 ) {
     spawn(async move {
         let mut interval = time::interval(process_interval);
         loop {
-            let query = queries_r.get_one::<String>(&query_execution_id);
-            let mut queries_w = queries_w.lock().unwrap();
-            match query {
-                Some(state) => {
-                    if state.to_string() == QueryExecutionState::Queued.as_str() {
-                        queries_w.empty(query_execution_id.clone());
-                        queries_w.insert(
+            let query_process = processes_r.get_one::<String>(&query_execution_id);
+            let mut processes_w = processes_w.lock().unwrap();
+            match query_process {
+                Some(query_process) => {
+                    if query_process.state.to_string() == QueryExecutionState::Queued.as_str() {
+                        processes_w.empty(query_execution_id.clone());
+                        processes_w.insert(
                             query_execution_id.clone(),
-                            QueryExecutionState::Running.as_str().to_string(),
+                            crate::model::QueryProcess {
+                                table_name: table_name.clone(),
+                                state: QueryExecutionState::Running.as_str().to_string(),
+                            },
                         );
-                    } else if state.to_string() == QueryExecutionState::Running.as_str() {
-                        queries_w.empty(query_execution_id.clone());
-                        queries_w.insert(
+                    } else if query_process.state.to_string()
+                        == QueryExecutionState::Running.as_str()
+                    {
+                        processes_w.empty(query_execution_id.clone());
+                        processes_w.insert(
                             query_execution_id.clone(),
-                            QueryExecutionState::Succeeded.as_str().to_string(),
+                            crate::model::QueryProcess {
+                                table_name: table_name.clone(),
+                                state: QueryExecutionState::Succeeded.as_str().to_string(),
+                            },
                         );
-                    } else if state.to_string() == QueryExecutionState::Succeeded.as_str() {
+                    } else if query_process.state.to_string()
+                        == QueryExecutionState::Succeeded.as_str()
+                    {
                         return;
                     }
                 }
                 None => {
-                    queries_w.insert(
+                    processes_w.insert(
                         query_execution_id.clone(),
-                        QueryExecutionState::Queued.as_str().to_string(),
+                        crate::model::QueryProcess {
+                            table_name: table_name.clone(),
+                            state: QueryExecutionState::Queued.as_str().to_string(),
+                        },
                     );
                 }
             }
-            queries_w.refresh();
+            processes_w.refresh();
 
             interval.tick().await;
         }
