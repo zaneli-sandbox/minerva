@@ -142,7 +142,8 @@ pub fn get_query_results(
         return Ok(HttpResponse::BadRequest().body(format!("state not succeeded yet: {:?}", state)));
     }
 
-    let rows = vec![
+    let mut rows = Vec::new();
+    rows.push(
         Row::builder()
             .set_data(Some(vec![
                 Datum::builder()
@@ -162,49 +163,79 @@ pub fn get_query_results(
                     .build(),
             ]))
             .build(),
-        Row::builder()
-            .set_data(Some(vec![
-                Datum::builder()
-                    .set_var_char_value(Some("2014-07-05".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("SFO4".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("Safari".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("200".to_string()))
-                    .build(),
-            ]))
-            .build(),
-        Row::builder()
-            .set_data(Some(vec![
-                Datum::builder()
-                    .set_var_char_value(Some("2014-07-05".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("SFO4".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("Opera".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
-                    .build(),
-                Datum::builder()
-                    .set_var_char_value(Some("200".to_string()))
-                    .build(),
-            ]))
-            .build(),
-    ];
+    );
+    let next_token = if input.next_token.is_none() {
+        rows.push(
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("2014-07-05".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("SFO4".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("Safari".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("200".to_string()))
+                        .build(),
+                ]))
+                .build(),
+        );
+        rows.push(
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("2014-07-05".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("SFO4".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("Opera".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("/test-image-2.jpeg".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("200".to_string()))
+                        .build(),
+                ]))
+                .build(),
+        );
+        Some("dummy_token".to_string())
+    } else {
+        rows.push(
+            Row::builder()
+                .set_data(Some(vec![
+                    Datum::builder()
+                        .set_var_char_value(Some("2014-07-05".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("SFO4".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("Firefox".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("/test-image-3.jpeg".to_string()))
+                        .build(),
+                    Datum::builder()
+                        .set_var_char_value(Some("200".to_string()))
+                        .build(),
+                ]))
+                .build(),
+        );
+        None
+    };
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
             result_set: ResultSet::builder().set_rows(Some(rows)).build(),
-            next_token: None,
+            next_token: next_token,
             update_count: 0,
         }),
     )

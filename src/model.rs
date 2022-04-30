@@ -96,6 +96,8 @@ pub struct Param {
     pub query_execution_id: Option<String>,
     #[serde(rename = "QueryString")]
     pub query_string: Option<String>,
+    #[serde(rename = "NextToken")]
+    pub next_token: Option<String>,
 }
 
 pub struct AppData {
