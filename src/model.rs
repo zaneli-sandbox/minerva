@@ -90,5 +90,6 @@ fn serialize_state<S: serde::Serializer>(
 #[derive(Debug, serde::Deserialize)]
 #[allow(non_snake_case)]
 pub struct Param {
-    pub QueryExecutionId: String,
+    pub QueryExecutionId: Option<String>,
+    pub QueryString: Option<String>,
 }

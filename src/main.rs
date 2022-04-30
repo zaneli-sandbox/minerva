@@ -5,6 +5,8 @@ use actix_rt::time;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Result};
 use aws_sdk_athena::model::{Datum, QueryExecutionState, ResultSet, Row};
 use dotenv::dotenv;
+use sqlparser::dialect::GenericDialect;
+use sqlparser::parser::Parser;
 use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -26,6 +28,17 @@ async fn root(
     })?;
 
     if target == OPERATION_NAME_START_QUERY_EXECUTION {
+        let input =
+            input.ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
+        let query_string = input
+            .QueryString
+            .clone()
+            .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
+        let dialect = GenericDialect {};
+        let _ = Parser::parse_sql(&dialect, &query_string).map_err(|_| {
+            HttpResponse::BadRequest().body(format!("invalid query: {:}", query_string))
+        })?;
+
         let query_execution_id = Uuid::new_v4().to_string();
         process_query(
             query_execution_id.clone(),
@@ -42,9 +55,13 @@ async fn root(
     } else if target == OPERATION_NAME_GET_QUERY_EXECUTION {
         let input =
             input.ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
+        let query_execution_id = input
+            .QueryExecutionId
+            .clone()
+            .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
         let state = data
             .queries_r
-            .get_one::<String>(&input.QueryExecutionId)
+            .get_one::<String>(&query_execution_id)
             .ok_or_else(|| {
                 HttpResponse::BadRequest().body("query_execution_id not found".to_string())
             })?;
@@ -53,7 +70,7 @@ async fn root(
         Ok(
             HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse {
                 QueryExecution: crate::model::QueryExecutionResponse {
-                    QueryExecutionId: input.QueryExecutionId.clone(),
+                    QueryExecutionId: query_execution_id.clone(),
                     Status: crate::model::StatusResponse { State: state },
                 },
             }),
@@ -61,9 +78,13 @@ async fn root(
     } else if target == OPERATION_NAME_GET_QUERY_RESULTS {
         let input =
             input.ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
+        let query_execution_id = input
+            .QueryExecutionId
+            .clone()
+            .ok_or_else(|| HttpResponse::BadRequest().body("unexpected input".to_string()))?;
         let state = data
             .queries_r
-            .get_one::<String>(&input.QueryExecutionId)
+            .get_one::<String>(&query_execution_id)
             .ok_or_else(|| {
                 HttpResponse::BadRequest().body("query_execution_id not found".to_string())
             })?;
