@@ -176,7 +176,7 @@ pub fn get_query_results(
         if count < offset {
             continue;
         }
-        if count > limit {
+        if count >= limit {
             next_token = Some(count.to_string());
             break;
         }
