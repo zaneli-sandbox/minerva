@@ -3,6 +3,7 @@ name = "minerva"
 version = "0.1.0"
 edition = "2021"
 authors = ["zaneli <shun.otani@gmail.com>"]
+readme = "README.md"
 
 [dependencies]
 actix-web = { version = "3.3", features = ["rustls"] }
