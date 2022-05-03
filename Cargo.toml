@@ -3,6 +3,7 @@ name = "minerva"
 version = "0.1.0"
 edition = "2021"
 authors = ["zaneli <shun.otani@gmail.com>"]
+repository = "https://github.com/zaneli/minerva"
 readme = "README.md"
 
 [dependencies]
