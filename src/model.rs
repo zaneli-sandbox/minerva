@@ -5,53 +5,112 @@ use std::time::Duration;
 #[derive(serde::Serialize)]
 pub struct StartQueryExecutionResponse {
     #[serde(rename = "QueryExecutionId")]
-    pub query_execution_id: String,
+    query_execution_id: String,
+}
+
+impl StartQueryExecutionResponse {
+    pub fn new(query_execution_id: String) -> Self {
+        StartQueryExecutionResponse {
+            query_execution_id: query_execution_id,
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
 pub struct GetQueryExecutionResponse {
     #[serde(rename = "QueryExecution")]
-    pub query_execution: QueryExecutionResponse,
+    query_execution: QueryExecutionResponse,
+}
+
+impl GetQueryExecutionResponse {
+    pub fn new(query_execution_id: String, state: QueryExecutionState) -> Self {
+        GetQueryExecutionResponse {
+            query_execution: QueryExecutionResponse {
+                query_execution_id: query_execution_id,
+                status: StatusResponse { state: state },
+            },
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
 pub struct GetQueryResultsResponse {
     #[serde(rename = "UpdateCount")]
-    pub update_count: u32,
+    update_count: u32,
     #[serde(rename = "ResultSet")]
-    pub result_set: ResultSet,
+    result_set: ResultSet,
     #[serde(rename = "NextToken")]
-    pub next_token: Option<String>,
+    next_token: Option<String>,
+}
+
+impl GetQueryResultsResponse {
+    pub fn new(
+        table_name: String,
+        column_names: Vec<String>,
+        rows: Vec<Row>,
+        next_token: Option<String>,
+    ) -> Self {
+        let mut column_info = Vec::new();
+        for column_name in &column_names {
+            column_info.push(ColumnInfo {
+                table_name: table_name.clone(),
+                name: column_name.clone(),
+                label: column_name.clone(),
+            });
+        }
+        GetQueryResultsResponse {
+            result_set: ResultSet {
+                rows: rows,
+                result_set_metadata: ResultSetMetadata {
+                    column_info: column_info,
+                },
+            },
+            next_token: next_token,
+            update_count: 0,
+        }
+    }
 }
 
 #[derive(serde::Serialize)]
-pub struct ResultSet {
+struct ResultSet {
     #[serde(rename = "Rows")]
-    pub rows: Vec<Row>,
+    rows: Vec<Row>,
     #[serde(rename = "ResultSetMetadata")]
-    pub result_set_metadata: ResultSetMetadata,
+    result_set_metadata: ResultSetMetadata,
 }
 
 #[derive(serde::Serialize)]
-pub struct ResultSetMetadata {
+struct ResultSetMetadata {
     #[serde(rename = "ColumnInfo")]
-    pub column_info: Vec<ColumnInfo>,
+    column_info: Vec<ColumnInfo>,
 }
 
 #[derive(serde::Serialize)]
-pub struct ColumnInfo {
+struct ColumnInfo {
     #[serde(rename = "TableName")]
-    pub table_name: String,
+    table_name: String,
     #[serde(rename = "Name")]
-    pub name: String,
+    name: String,
     #[serde(rename = "Label")]
-    pub label: String,
+    label: String,
 }
 
 #[derive(serde::Serialize)]
 pub struct Row {
     #[serde(rename = "Data")]
     pub data: Vec<Datum>,
+}
+
+impl Row {
+    pub fn new(values: &Vec<String>) -> Self {
+        let mut data = Vec::new();
+        for value in values {
+            data.push(Datum {
+                var_char_value: value.clone(),
+            });
+        }
+        Row { data: data }
+    }
 }
 
 #[derive(serde::Serialize)]
@@ -61,11 +120,11 @@ pub struct Datum {
 }
 
 #[derive(serde::Serialize)]
-pub struct QueryExecutionResponse {
+struct QueryExecutionResponse {
     #[serde(rename = "QueryExecutionId")]
-    pub query_execution_id: String,
+    query_execution_id: String,
     #[serde(rename = "Status")]
-    pub status: StatusResponse,
+    status: StatusResponse,
 }
 
 #[derive(serde::Serialize)]

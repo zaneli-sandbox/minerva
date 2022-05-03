@@ -93,9 +93,9 @@ pub fn start_query_execution(
     );
 
     Ok(
-        HttpResponse::Ok().json(crate::model::StartQueryExecutionResponse {
-            query_execution_id: query_execution_id.clone(),
-        }),
+        HttpResponse::Ok().json(crate::model::StartQueryExecutionResponse::new(
+            query_execution_id,
+        )),
     )
 }
 
@@ -116,12 +116,10 @@ pub fn get_query_execution(
     let state = QueryExecutionState::from(query_process.state.as_ref());
 
     Ok(
-        HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse {
-            query_execution: crate::model::QueryExecutionResponse {
-                query_execution_id: query_execution_id.clone(),
-                status: crate::model::StatusResponse { state: state },
-            },
-        }),
+        HttpResponse::Ok().json(crate::model::GetQueryExecutionResponse::new(
+            query_execution_id,
+            state,
+        )),
     )
 }
 
@@ -149,20 +147,12 @@ pub fn get_query_results(
     let b = BufReader::new(f);
     let mut csv_reader = csv::ReaderBuilder::new().has_headers(true).from_reader(b);
 
-    let mut column_info = Vec::new();
-    let mut headers = Vec::new();
+    let mut column_names = Vec::new();
     for header in csv_reader
         .headers()
         .map_err(|_| HttpResponse::BadRequest().body("failed to read csv headers".to_string()))?
     {
-        headers.push(crate::model::Datum {
-            var_char_value: header.to_string(),
-        });
-        column_info.push(crate::model::ColumnInfo {
-            table_name: table_name.to_string(),
-            name: header.to_string(),
-            label: header.to_string(),
-        })
+        column_names.push(header.to_string());
     }
 
     let mut rows = Vec::new();
@@ -177,7 +167,7 @@ pub fn get_query_results(
     let mut count = 0;
     if input.next_token.is_none() {
         let _ = count + 1;
-        rows.push(crate::model::Row { data: headers });
+        rows.push(crate::model::Row::new(&column_names));
     }
 
     let mut next_token = None;
@@ -204,16 +194,12 @@ pub fn get_query_results(
     }
 
     Ok(
-        HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
-            result_set: crate::model::ResultSet {
-                rows: rows,
-                result_set_metadata: crate::model::ResultSetMetadata {
-                    column_info: column_info,
-                },
-            },
-            next_token: next_token,
-            update_count: 0,
-        }),
+        HttpResponse::Ok().json(crate::model::GetQueryResultsResponse::new(
+            table_name.to_string(),
+            column_names,
+            rows,
+            next_token,
+        )),
     )
 }
 
@@ -227,36 +213,11 @@ fn process_query(
     spawn(async move {
         let mut interval = time::interval(process_interval);
         loop {
-            let query_process = processes_r.get_one::<String>(&query_execution_id);
+            let query_state = processes_r
+                .get_one::<String>(&query_execution_id)
+                .map(|v| QueryExecutionState::from(v.state.as_ref()));
             let mut processes_w = processes_w.lock().unwrap();
-            match query_process {
-                Some(query_process) => {
-                    if query_process.state.to_string() == QueryExecutionState::Queued.as_str() {
-                        processes_w.empty(query_execution_id.clone());
-                        processes_w.insert(
-                            query_execution_id.clone(),
-                            crate::model::QueryProcess {
-                                table_name: table_name.clone(),
-                                state: QueryExecutionState::Running.as_str().to_string(),
-                            },
-                        );
-                    } else if query_process.state.to_string()
-                        == QueryExecutionState::Running.as_str()
-                    {
-                        processes_w.empty(query_execution_id.clone());
-                        processes_w.insert(
-                            query_execution_id.clone(),
-                            crate::model::QueryProcess {
-                                table_name: table_name.clone(),
-                                state: QueryExecutionState::Succeeded.as_str().to_string(),
-                            },
-                        );
-                    } else if query_process.state.to_string()
-                        == QueryExecutionState::Succeeded.as_str()
-                    {
-                        return;
-                    }
-                }
+            match query_state {
                 None => {
                     processes_w.insert(
                         query_execution_id.clone(),
@@ -266,6 +227,28 @@ fn process_query(
                         },
                     );
                 }
+                Some(QueryExecutionState::Queued) => {
+                    processes_w.empty(query_execution_id.clone());
+                    processes_w.insert(
+                        query_execution_id.clone(),
+                        crate::model::QueryProcess {
+                            table_name: table_name.clone(),
+                            state: QueryExecutionState::Running.as_str().to_string(),
+                        },
+                    );
+                }
+                Some(QueryExecutionState::Running) => {
+                    processes_w.empty(query_execution_id.clone());
+                    processes_w.insert(
+                        query_execution_id.clone(),
+                        crate::model::QueryProcess {
+                            table_name: table_name.clone(),
+                            state: QueryExecutionState::Succeeded.as_str().to_string(),
+                        },
+                    );
+                }
+                Some(QueryExecutionState::Succeeded) => return,
+                Some(state) => panic!("unexpected state: {:?}", state),
             }
             processes_w.refresh();
 
