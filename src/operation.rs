@@ -1,7 +1,7 @@
 use actix_rt::spawn;
 use actix_rt::time;
 use actix_web::{HttpResponse, Result};
-use aws_sdk_athena::model::{Datum, QueryExecutionState, ResultSet, Row};
+use aws_sdk_athena::model::QueryExecutionState;
 use sqlparser::ast::{ObjectName, SetExpr, Statement, TableFactor};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -149,20 +149,23 @@ pub fn get_query_results(
     let b = BufReader::new(f);
     let mut csv_reader = csv::ReaderBuilder::new().has_headers(true).from_reader(b);
 
+    let mut column_info = Vec::new();
     let mut headers = Vec::new();
     for header in csv_reader
         .headers()
         .map_err(|_| HttpResponse::BadRequest().body("failed to read csv headers".to_string()))?
     {
-        headers.push(
-            Datum::builder()
-                .set_var_char_value(Some(header.to_string()))
-                .build(),
-        );
+        headers.push(crate::model::Datum {
+            var_char_value: header.to_string(),
+        });
+        column_info.push(crate::model::ColumnInfo {
+            table_name: table_name.to_string(),
+            name: header.to_string(),
+            label: header.to_string(),
+        })
     }
 
     let mut rows = Vec::new();
-
     let offset = input
         .next_token
         .as_ref()
@@ -174,7 +177,7 @@ pub fn get_query_results(
     let mut count = 0;
     if input.next_token.is_none() {
         let _ = count + 1;
-        rows.push(Row::builder().set_data(Some(headers)).build());
+        rows.push(crate::model::Row { data: headers });
     }
 
     let mut next_token = None;
@@ -193,18 +196,21 @@ pub fn get_query_results(
 
         let mut records = Vec::new();
         for record in rs.iter() {
-            records.push(
-                Datum::builder()
-                    .set_var_char_value(Some(record.to_string()))
-                    .build(),
-            );
+            records.push(crate::model::Datum {
+                var_char_value: record.to_string(),
+            });
         }
-        rows.push(Row::builder().set_data(Some(records)).build());
+        rows.push(crate::model::Row { data: records });
     }
 
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
-            result_set: ResultSet::builder().set_rows(Some(rows)).build(),
+            result_set: crate::model::ResultSet {
+                rows: rows,
+                result_set_metadata: crate::model::ResultSetMetadata {
+                    column_info: column_info,
+                },
+            },
             next_token: next_token,
             update_count: 0,
         }),

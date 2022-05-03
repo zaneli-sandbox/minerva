@@ -1,5 +1,4 @@
-use aws_sdk_athena::model::{QueryExecutionState, ResultSet};
-use serde::ser::SerializeStruct;
+use aws_sdk_athena::model::QueryExecutionState;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -19,54 +18,46 @@ pub struct GetQueryExecutionResponse {
 pub struct GetQueryResultsResponse {
     #[serde(rename = "UpdateCount")]
     pub update_count: u32,
-    #[serde(rename = "ResultSet", serialize_with = "serialize_result_set")]
+    #[serde(rename = "ResultSet")]
     pub result_set: ResultSet,
     #[serde(rename = "NextToken")]
     pub next_token: Option<String>,
 }
 
-fn serialize_result_set<S: serde::Serializer>(
-    result_set: &ResultSet,
-    s: S,
-) -> Result<S::Ok, S::Error> {
-    let mut ss = s.serialize_struct("ResultSet", 1)?;
-    let rows = result_set.rows();
-    let mut row = Vec::new();
-    if let Some(rows) = rows {
-        for r in rows {
-            row.push(Row::from(r.clone()));
-        }
-    };
-    ss.serialize_field("Rows", &row)?;
-    ss.end()
+#[derive(serde::Serialize)]
+pub struct ResultSet {
+    #[serde(rename = "Rows")]
+    pub rows: Vec<Row>,
+    #[serde(rename = "ResultSetMetadata")]
+    pub result_set_metadata: ResultSetMetadata,
 }
 
 #[derive(serde::Serialize)]
-struct Row {
+pub struct ResultSetMetadata {
+    #[serde(rename = "ColumnInfo")]
+    pub column_info: Vec<ColumnInfo>,
+}
+
+#[derive(serde::Serialize)]
+pub struct ColumnInfo {
+    #[serde(rename = "TableName")]
+    pub table_name: String,
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "Label")]
+    pub label: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct Row {
     #[serde(rename = "Data")]
-    data: Vec<Datum>,
-}
-
-impl Row {
-    fn from(row: aws_sdk_athena::model::Row) -> Self {
-        let mut data = Vec::new();
-        if let Some(d) = row.data {
-            for datum in d {
-                if let Some(v) = datum.var_char_value {
-                    data.push(Datum {
-                        var_char_value: v.clone(),
-                    });
-                }
-            }
-        }
-        Row { data: data }
-    }
+    pub data: Vec<Datum>,
 }
 
 #[derive(serde::Serialize)]
-struct Datum {
+pub struct Datum {
     #[serde(rename = "VarCharValue")]
-    var_char_value: String,
+    pub var_char_value: String,
 }
 
 #[derive(serde::Serialize)]
