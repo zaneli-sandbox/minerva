@@ -98,6 +98,8 @@ pub struct Param {
     pub query_string: Option<String>,
     #[serde(rename = "NextToken")]
     pub next_token: Option<String>,
+    #[serde(rename = "MaxResults")]
+    pub max_results: Option<u64>,
 }
 
 pub struct AppData {

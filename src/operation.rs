@@ -162,8 +162,31 @@ pub fn get_query_results(
     }
 
     let mut rows = Vec::new();
-    rows.push(Row::builder().set_data(Some(headers)).build());
+
+    let offset = input
+        .next_token
+        .as_ref()
+        .unwrap_or(&"0".to_string())
+        .parse::<u64>()
+        .map_err(|_| HttpResponse::BadRequest().body("invalid next_token".to_string()))?;
+    let limit = input.max_results.unwrap_or(100) + offset;
+
+    let mut count = 0;
+    if input.next_token.is_none() {
+        let _ = count + 1;
+        rows.push(Row::builder().set_data(Some(headers)).build());
+    }
+
+    let mut next_token = None;
     for records in csv_reader.records() {
+        count += 1;
+        if count < offset {
+            continue;
+        }
+        if count > limit {
+            next_token = Some(count.to_string());
+            break;
+        }
         let rs = records.map_err(|_| {
             HttpResponse::BadRequest().body("failed to read csv fixture".to_string())
         })?;
@@ -179,11 +202,6 @@ pub fn get_query_results(
         rows.push(Row::builder().set_data(Some(records)).build());
     }
 
-    let next_token = if input.next_token.is_none() {
-        Some("dummy_token".to_string())
-    } else {
-        None
-    };
     Ok(
         HttpResponse::Ok().json(crate::model::GetQueryResultsResponse {
             result_set: ResultSet::builder().set_rows(Some(rows)).build(),
